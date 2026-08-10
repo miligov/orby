@@ -1025,7 +1025,9 @@ var keys={};
 var touchOn=('ontouchstart' in window)||navigator.maxTouchPoints>0;
 if(touchOn)document.body.classList.add('touch');
 function mixInput(){
-  if(TC.aim!==null)IN.aim=TC.aim;
+  /* приоритет: джойстик → ведение пальцем по экрану → клавиатура */
+  if(JOY.active&&JOY.mag>0.08)IN.aim=JOY.ax;
+  else if(TC.aim!==null)IN.aim=TC.aim;
   else if(KB.x||KB.y)IN.aim=Math.atan2(KB.y,KB.x);
   else IN.aim=null;
   IN.boost=(TC.boost||KB.boost)?1:0;
@@ -1076,6 +1078,56 @@ function aimUp(e){
 }
 cv.addEventListener('pointerup',aimUp);
 cv.addEventListener('pointercancel',aimUp);
+
+/* ============ ДЖОЙСТИК (рабочий) ============ */
+var JOY={active:false,id:-1,cx:0,cy:0,ax:0,mag:0};
+var joyEl=$('joy'),knEl=joyEl.querySelector('.kn');
+function joyReset(){
+  JOY.active=false;JOY.id=-1;JOY.ax=0;JOY.mag=0;
+  knEl.style.left='34px';knEl.style.top='34px';
+  mixInput();
+}
+joyEl.addEventListener('pointerdown',function(e){
+  e.preventDefault();
+  if(JOY.active)joyReset();
+  audioWake();
+  if(G.state!=='play')return;
+  JOY.active=true;JOY.id=e.pointerId;
+  var r=joyEl.getBoundingClientRect();
+  JOY.cx=r.left+r.width/2;JOY.cy=r.top+r.height/2;
+  try{joyEl.setPointerCapture&&joyEl.setPointerCapture(e.pointerId);}catch(err){}
+  updateJoy(e.clientX,e.clientY);
+},{passive:false});
+joyEl.addEventListener('pointermove',function(e){
+  if(JOY.active&&e.pointerId===JOY.id)updateJoy(e.clientX,e.clientY);
+},{passive:false});
+/* отпускание ГДЕ УГОДНО — чтобы не залипал */
+document.addEventListener('pointerup',function(e){
+  if(JOY.active&&e.pointerId===JOY.id)joyReset();
+},{passive:true});
+document.addEventListener('pointercancel',function(e){
+  if(JOY.active&&e.pointerId===JOY.id)joyReset();
+},{passive:true});
+document.addEventListener('pointerleave',function(e){
+  if(JOY.active&&e.pointerId===JOY.id)joyReset();
+},{passive:true});
+window.addEventListener('blur',function(){if(JOY.active)joyReset();});
+function updateJoy(cx,cy){
+  var dx=cx-JOY.cx,dy=cy-JOY.cy;
+  var d=Math.hypot(dx,dy),max=38;
+  if(d>max){dx=dx/d*max;dy=dy/d*max;d=max;}
+  JOY.ax=Math.atan2(dy,dx);
+  JOY.mag=Math.min(1,d/max);
+  knEl.style.left=(34+dx)+'px';knEl.style.top=(34+dy)+'px';
+  mixInput();
+}
+/* страховка: если событий нет 800мс — сброс (анти-залипание) */
+setInterval(function(){
+  if(JOY.active&&performance.now()-JOY.last>800)joyReset();
+},300);
+JOY.last=performance.now();
+document.addEventListener('pointerdown',function(){JOY.last=performance.now();},{passive:true});
+
 (function(){
   var el=$('boost'),id=null;
   el.addEventListener('pointerdown',function(e){
@@ -1210,5 +1262,5 @@ try{window.__MOD={vibOn:vibOn,toggleVib:toggleVib,sndOn:function(){return P.snd!
 
 })();
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a28dacbcbeceb79a',t:'MTc4NjM1MTAwNg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
